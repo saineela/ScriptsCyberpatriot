@@ -1,28 +1,30 @@
 #!/bin/bash
 
-# Function to prompt the user for Fail2Ban setup
+# Update and Upgrade System
+echo "Updating and upgrading system..."
+sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
+
+# Function: Fail2Ban Setup
 setup_fail2ban() {
-    echo "Do you want to install and set up Fail2Ban? (yes/no)"
-    read -r user_input
+    read -rp "Do you want to install and set up Fail2Ban? (yes/no) " user_input
     if [[ "$user_input" == "yes" ]]; then
-        echo "Installing Fail2Ban..."
+        echo "Installing and configuring Fail2Ban..."
         sudo apt-get install -y fail2ban
 
         # Enable and start Fail2Ban service
-        echo "Configuring Fail2Ban for SSH..."
         sudo systemctl enable fail2ban
         sudo systemctl start fail2ban
 
-        # Create a custom jail.local configuration
-        {
-            echo "[sshd]"
-            echo "enabled = true"
-            echo "port = ssh"
-            echo "filter = sshd"
-            echo "logpath = /var/log/auth.log"
-            echo "maxretry = 5"
-            echo "bantime = 10m"
-        } | sudo tee /etc/fail2ban/jail.local > /dev/null
+        # Custom Fail2Ban configuration for SSH
+        sudo tee /etc/fail2ban/jail.local > /dev/null <<EOF
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 5
+bantime = 10m
+EOF
 
         echo "Fail2Ban installed and configured."
     else
@@ -30,108 +32,71 @@ setup_fail2ban() {
     fi
 }
 
-# Function to prompt the user to check for backdoors
+# Function: Check for Backdoors
 check_for_backdoors() {
-    echo "Do you want to check for backdoors using chkrootkit and rkhunter? (yes/no)"
-    read -r user_input
+    read -rp "Do you want to check for backdoors with chkrootkit and rkhunter? (yes/no) " user_input
     if [[ "$user_input" == "yes" ]]; then
-        echo "Installing chkrootkit and rkhunter..."
+        echo "Installing and running chkrootkit and rkhunter..."
         sudo apt-get install -y chkrootkit rkhunter
-
-        echo "Running chkrootkit..."
         sudo chkrootkit
-
-        echo "Updating rkhunter..."
-        sudo rkhunter --update
-
-        echo "Running rkhunter check..."
-        sudo rkhunter --check
+        sudo rkhunter --update && sudo rkhunter --check
     else
         echo "Skipping backdoor check."
     fi
 }
 
-# Update and upgrade system
-echo "Updating and upgrading system..."
-sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
-
-# Prompt for Fail2Ban installation
-setup_fail2ban
-
-# Enable and configure UFW
+# Install and Enable UFW
 echo "Enabling and configuring UFW..."
 sudo apt-get install -y ufw
 sudo ufw enable
 
-# Configure SSH settings to disable root login
-echo "Disabling root login for SSH..."
-if grep -qF 'PermitRootLogin' /etc/ssh/sshd_config; then
-    sudo sed -i 's/^.*PermitRootLogin.*$/PermitRootLogin no/' /etc/ssh/sshd_config
-else
-    echo 'PermitRootLogin no' | sudo tee -a /etc/ssh/sshd_config
-fi
-
-# Lock the root user
-echo "Locking the root user..."
+# Configure SSH Security
+echo "Configuring SSH security settings..."
+sudo sed -i '/^PermitRootLogin/s/.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sudo passwd -l root
 
-# Set password expiration policies
+# Set Password Expiration Policies
 echo "Configuring password expiration policies..."
-sudo sed -i 's/PASS_MAX_DAYS.*$/PASS_MAX_DAYS 90/;s/PASS_MIN_DAYS.*$/PASS_MIN_DAYS 10/;s/PASS_WARN_AGE.*$/PASS_WARN_AGE 7/' /etc/login.defs
+sudo sed -i 's/PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/; s/PASS_MIN_DAYS.*/PASS_MIN_DAYS 10/; s/PASS_WARN_AGE.*/PASS_WARN_AGE 7/' /etc/login.defs
 echo 'auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800' | sudo tee -a /etc/pam.d/common-auth
 
-# Install libpam-cracklib for password complexity policies
-echo "Installing PAM cracklib..."
-sudo apt-get install -y libpam-cracklib
-
-# Update PAM settings for password complexity
-echo "Updating PAM settings for password complexity..."
-sudo sed -i 's/\(pam_unix\.so.*\)$/\1 remember=5 minlen=8/' /etc/pam.d/common-password
-sudo sed -i 's/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1/' /etc/pam.d/common-password
-
-# Install and enable auditd
-echo "Installing and enabling auditd..."
+# Install and Enable auditd
+echo "Installing and enabling auditd for logging..."
 sudo apt-get install -y auditd
-sudo systemctl enable auditd
-sudo systemctl start auditd
+sudo systemctl enable auditd && sudo systemctl start auditd
 
-# Remove samba packages if installed
-echo "Removing samba packages if installed..."
-sudo apt-get remove -y samba*
-
-# Remove prohibited software
+# Remove Samba and Other Prohibited Software
 echo "Removing prohibited software..."
-prohibited_packages=(nmap zenmap apache2 nginx lighttpd wireshark tcpdump netcat-traditional nikto ophcrack)
-
-for pkg in "${prohibited_packages[@]}"; do
+sudo apt-get remove -y samba*
+for pkg in nmap zenmap apache2 nginx lighttpd wireshark tcpdump netcat-traditional nikto ophcrack; do
     if dpkg -s "$pkg" &> /dev/null; then
         echo "Removing $pkg..."
         sudo apt-get remove --purge -y "$pkg"
     else
-        echo "$pkg not installed."
+        echo "$pkg is not installed."
     fi
 done
 
-# List non-work-related media files
-echo "Listing non-work-related media files (music and video)..."
+# List Non-Work-Related Media Files
+echo "Searching for non-work-related media files..."
 find /home/ -type f \( -name "*.mp3" -o -name "*.mp4" \) -exec echo "Found media file: {}" \;
 
-# List downloaded "hacking tools" packages
-echo "Listing downloaded 'hacking tools' packages..."
-find /home/ -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) -exec echo "Found downloaded package: {}" \;
+# List Downloaded "Hacking Tools" Packages
+echo "Searching for downloaded 'hacking tools' packages..."
+find /home/ -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) -exec echo "Found package: {}" \;
 
-# Configure additional SSH security settings
+# Additional SSH Security Settings
 echo "Configuring additional SSH security settings..."
-sudo sed -i 's/^.*ChallengeResponseAuthentication.*$/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
-sudo sed -i 's/^.*PasswordAuthentication.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
-sudo sed -i 's/^.*UsePAM.*$/UsePAM no/' /etc/ssh/sshd_config
-sudo sed -i 's/^.*PermitEmptyPasswords.*$/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+sudo sed -i 's/^.*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+sudo sed -i 's/^.*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo sed -i 's/^.*PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
-echo "Restarting SSH service..."
+# Restart SSH Service
+echo "Restarting SSH service to apply security settings..."
 sudo systemctl restart sshd
-echo "SSH service restarted with secure settings."
 
-# Prompt for backdoor check
+# Run Fail2Ban and Backdoor Checks
+setup_fail2ban
 check_for_backdoors
 
-echo "All tasks completed."
+echo "All security tasks completed successfully."
