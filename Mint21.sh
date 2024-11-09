@@ -1,8 +1,4 @@
-#!/bin/bash
-
-# Update and Upgrade System
-echo "Updating and upgrading system..."
-sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
+#!/usr/bin/env bash
 
 # Function: Fail2Ban Setup
 setup_fail2ban() {
@@ -44,6 +40,10 @@ check_for_backdoors() {
         echo "Skipping backdoor check."
     fi
 }
+
+# Update and Upgrade System
+echo "Updating and upgrading system..."
+sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
 
 # Install and Enable UFW
 echo "Enabling and configuring UFW..."
