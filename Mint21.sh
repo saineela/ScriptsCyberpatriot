@@ -7,12 +7,12 @@ setup_fail2ban() {
     if [[ "$user_input" == "yes" ]]; then
         echo "Installing Fail2Ban..."
         sudo apt-get install -y fail2ban
-        
-        # Configure Fail2Ban to monitor SSH
+
+        # Enable and start Fail2Ban service
         echo "Configuring Fail2Ban for SSH..."
         sudo systemctl enable fail2ban
         sudo systemctl start fail2ban
-        
+
         # Create a custom jail.local configuration
         {
             echo "[sshd]"
@@ -40,10 +40,10 @@ check_for_backdoors() {
 
         echo "Running chkrootkit..."
         sudo chkrootkit
-        
+
         echo "Updating rkhunter..."
         sudo rkhunter --update
-        
+
         echo "Running rkhunter check..."
         sudo rkhunter --check
     else
@@ -51,20 +51,20 @@ check_for_backdoors() {
     fi
 }
 
-# Install updates
-echo "Installing updates..."
+# Update and upgrade system
+echo "Updating and upgrading system..."
 sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
 
 # Prompt for Fail2Ban installation
 setup_fail2ban
 
-# Enable Uncomplicated Firewall (UFW)
+# Enable and configure UFW
 echo "Enabling and configuring UFW..."
 sudo apt-get install -y ufw
 sudo ufw enable
 
-# No root login on sshd
-echo "Configuring SSH settings to disable root login..."
+# Configure SSH settings to disable root login
+echo "Disabling root login for SSH..."
 if grep -qF 'PermitRootLogin' /etc/ssh/sshd_config; then
     sudo sed -i 's/^.*PermitRootLogin.*$/PermitRootLogin no/' /etc/ssh/sshd_config
 else
@@ -75,12 +75,12 @@ fi
 echo "Locking the root user..."
 sudo passwd -l root
 
-# Configure password expiration policies
+# Set password expiration policies
 echo "Configuring password expiration policies..."
 sudo sed -i 's/PASS_MAX_DAYS.*$/PASS_MAX_DAYS 90/;s/PASS_MIN_DAYS.*$/PASS_MIN_DAYS 10/;s/PASS_WARN_AGE.*$/PASS_WARN_AGE 7/' /etc/login.defs
 echo 'auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800' | sudo tee -a /etc/pam.d/common-auth
 
-# Install libpam-cracklib for password policies
+# Install libpam-cracklib for password complexity policies
 echo "Installing PAM cracklib..."
 sudo apt-get install -y libpam-cracklib
 
@@ -92,10 +92,11 @@ sudo sed -i 's/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocred
 # Install and enable auditd
 echo "Installing and enabling auditd..."
 sudo apt-get install -y auditd
-sudo auditctl -e 1
+sudo systemctl enable auditd
+sudo systemctl start auditd
 
 # Remove samba packages if installed
-echo "Removing samba packages..."
+echo "Removing samba packages if installed..."
 sudo apt-get remove -y samba*
 
 # Remove prohibited software
@@ -106,23 +107,21 @@ for pkg in "${prohibited_packages[@]}"; do
     if dpkg -s "$pkg" &> /dev/null; then
         echo "Removing $pkg..."
         sudo apt-get remove --purge -y "$pkg"
-        echo "$pkg removed."
     else
         echo "$pkg not installed."
     fi
 done
 
-# List non-work-related music and video files
-echo "Finding non-work-related media files (music and video)..."
+# List non-work-related media files
+echo "Listing non-work-related media files (music and video)..."
 find /home/ -type f \( -name "*.mp3" -o -name "*.mp4" \) -exec echo "Found media file: {}" \;
 
-# Find and list potentially unwanted "hacking tools" packages
-echo "Finding downloaded 'hacking tools' packages..."
+# List downloaded "hacking tools" packages
+echo "Listing downloaded 'hacking tools' packages..."
 find /home/ -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) -exec echo "Found downloaded package: {}" \;
 
-# Secure SSH settings
-echo "Configuring additional SSH settings..."
-# Additional SSH security settings
+# Configure additional SSH security settings
+echo "Configuring additional SSH security settings..."
 sudo sed -i 's/^.*ChallengeResponseAuthentication.*$/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/^.*PasswordAuthentication.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/^.*UsePAM.*$/UsePAM no/' /etc/ssh/sshd_config
