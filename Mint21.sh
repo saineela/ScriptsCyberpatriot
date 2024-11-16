@@ -1,9 +1,18 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-# Function: Fail2Ban Setup
+# Function to ask for confirmation
+confirm() {
+    read -p "$1 [y/n]: " choice
+    case "$choice" in 
+        y|Y ) return 0;;
+        n|N ) return 1;;
+        * ) echo "Invalid input"; return 1;;
+    esac
+}
+
+# Setup Fail2Ban
 setup_fail2ban() {
-    read -rp "Do you want to install and set up Fail2Ban? (yes/no) " user_input
-    if [[ "$user_input" == "yes" ]]; then
+    if confirm "Do you want to install and set up Fail2Ban?"; then
         echo "Installing and configuring Fail2Ban..."
         sudo apt-get install -y fail2ban
 
@@ -28,10 +37,9 @@ EOF
     fi
 }
 
-# Function: Check for Backdoors
+# Check for Backdoors
 check_for_backdoors() {
-    read -rp "Do you want to check for backdoors with chkrootkit and rkhunter? (yes/no) " user_input
-    if [[ "$user_input" == "yes" ]]; then
+    if confirm "Do you want to check for backdoors with chkrootkit and rkhunter?"; then
         echo "Installing and running chkrootkit and rkhunter..."
         sudo apt-get install -y chkrootkit rkhunter
         sudo chkrootkit
@@ -41,62 +49,179 @@ check_for_backdoors() {
     fi
 }
 
+# Main script
+
 # Update and Upgrade System
-echo "Updating and upgrading system..."
-sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
+if confirm "Would you like to update and upgrade the system?"; then
+    echo "Updating and upgrading the system..."
+    sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y
+else
+    echo "Skipping system update and upgrade."
+fi
 
-# Install and Enable UFW
-echo "Enabling and configuring UFW..."
-sudo apt-get install -y ufw
-sudo ufw enable
+# Install and Enable UFW (Uncomplicated Firewall)
+if confirm "Would you like to install and enable the UFW firewall?"; then
+    echo "Installing and enabling UFW firewall..."
+    sudo apt-get install -y ufw
+    sudo ufw enable
+    sudo ufw default deny incoming
+    sudo ufw default allow outgoing
+else
+    echo "Skipping UFW firewall installation and enablement."
+fi
 
-# Configure SSH Security
-echo "Configuring SSH security settings..."
-sudo sed -i '/^PermitRootLogin/s/.*/PermitRootLogin no/' /etc/ssh/sshd_config
-sudo passwd -l root
+# Change Password Policy in /etc/login.defs
+if confirm "Would you like to set password policies for maximum and minimum days and warning age?"; then
+    echo "Setting password policies in /etc/login.defs..."
+    sudo sed -i 's/PASS_MAX_DAYS.*$/PASS_MAX_DAYS 90/' /etc/login.defs
+    sudo sed -i 's/PASS_MIN_DAYS.*$/PASS_MIN_DAYS 10/' /etc/login.defs
+    sudo sed -i 's/PASS_WARN_AGE.*$/PASS_WARN_AGE 7/' /etc/login.defs
+else
+    echo "Skipping password policy configuration."
+fi
 
-# Set Password Expiration Policies
-echo "Configuring password expiration policies..."
-sudo sed -i 's/PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/; s/PASS_MIN_DAYS.*/PASS_MIN_DAYS 10/; s/PASS_WARN_AGE.*/PASS_WARN_AGE 7/' /etc/login.defs
-echo 'auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800' | sudo tee -a /etc/pam.d/common-auth
+# Install and Enable Auditing
+if confirm "Would you like to install and enable auditd for system auditing?"; then
+    echo "Installing and enabling auditd..."
+    sudo apt-get install -y auditd
+    sudo auditctl -e 1
+else
+    echo "Skipping auditd installation and enablement."
+fi
 
-# Install and Enable auditd
-echo "Installing and enabling auditd for logging..."
-sudo apt-get install -y auditd
-sudo systemctl enable auditd && sudo systemctl start auditd
+# Check for Unusual Administrators in the Sudo Group
+if confirm "Would you like to check for unusual administrators in the sudo group?"; then
+    echo "Checking for unusual administrators in the sudo group..."
+    sudo mawk -F: '$1 == "sudo"' /etc/group
+else
+    echo "Skipping check for unusual administrators."
+fi
 
-# Remove Samba and Other Prohibited Software
-echo "Removing prohibited software..."
-sudo apt-get remove -y samba*
-for pkg in nmap zenmap apache2 nginx lighttpd wireshark tcpdump netcat-traditional nikto ophcrack; do
-    if dpkg -s "$pkg" &> /dev/null; then
-        echo "Removing $pkg..."
-        sudo apt-get remove --purge -y "$pkg"
+# Check for Users with UID Greater than 999 (Non-System Accounts)
+if confirm "Would you like to check for non-system users with UID greater than 999?"; then
+    echo "Checking for non-system users..."
+    sudo mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd
+else
+    echo "Skipping check for non-system users."
+fi
+
+# Check for Accounts with Empty Passwords
+if confirm "Would you like to check for accounts with empty passwords?"; then
+    echo "Checking for accounts with empty passwords..."
+    sudo mawk -F: '$2 == ""' /etc/passwd
+else
+    echo "Skipping check for accounts with empty passwords."
+fi
+
+# Check for Non-root UID 0 Accounts
+if confirm "Would you like to check for non-root accounts with UID 0?"; then
+    echo "Checking for non-root accounts with UID 0..."
+    sudo mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd
+else
+    echo "Skipping check for non-root accounts with UID 0."
+fi
+
+# Remove Samba and SMB Packages
+if confirm "Would you like to remove any Samba-related packages?"; then
+    echo "Removing Samba-related packages..."
+    sudo apt-get remove -y .*samba.* .*smb.*
+else
+    echo "Skipping removal of Samba-related packages."
+fi
+
+# Find and Offer to Delete Music Files
+if confirm "Would you like to find music files (.mp3, .mp4) in the system and ask for deletion?"; then
+    echo "Searching for music files..."
+    music_files=$(find /home/ -type f \( -name "*.mp3" -o -name "*.mp4" \))
+    
+    if [ -n "$music_files" ]; then
+        echo "Music files found:"
+        echo "$music_files"
+        if confirm "Do you want to delete all of these files?"; then
+            echo "$music_files" | xargs rm -f
+            echo "Music files deleted."
+        else
+            echo "Music files were not deleted."
+        fi
     else
-        echo "$pkg is not installed."
+        echo "No music files found."
     fi
-done
+else
+    echo "Skipping search for music files."
+fi
 
-# List Non-Work-Related Media Files
-echo "Searching for non-work-related media files..."
-find /home/ -type f \( -name "*.mp3" -o -name "*.mp4" \) -exec echo "Found media file: {}" \;
+# Find and Offer to Delete Potential "Hacking Tools" Packages
+if confirm "Would you like to find downloaded packages (e.g., .tar.gz, .tgz, .zip, .deb) and ask for deletion?"; then
+    echo "Searching for potential downloaded 'hacking tools' packages..."
+    package_files=$(find /home/ -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \))
+    
+    if [ -n "$package_files" ]; then
+        echo "Potential 'hacking tools' packages found:"
+        echo "$package_files"
+        if confirm "Do you want to delete all of these files?"; then
+            echo "$package_files" | xargs rm -f
+            echo "Package files deleted."
+        else
+            echo "Package files were not deleted."
+        fi
+    else
+        echo "No suspicious package files found."
+    fi
+else
+    echo "Skipping search for potential 'hacking tools' packages."
+fi
 
-# List Downloaded "Hacking Tools" Packages
-echo "Searching for downloaded 'hacking tools' packages..."
-find /home/ -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) -exec echo "Found package: {}" \;
+# Check for Blacklisted Programs
+if confirm "Would you like to check for blacklisted programs (nmap, zenmap, apache2, nginx, lighttpd, wireshark, tcpdump, netcat-traditional, nikto, ophcrack)?"; then
+    echo "Checking for blacklisted programs..."
+    blacklisted_programs=("nmap" "zenmap" "apache2" "nginx" "lighttpd" "wireshark" "tcpdump" "netcat-traditional" "nikto" "ophcrack")
+    found_programs=()
+    
+    # Loop through each blacklisted program and check if it is installed
+    for program in "${blacklisted_programs[@]}"; do
+        if dpkg -l | grep -qw "$program"; then
+            found_programs+=("$program")
+        fi
+    done
 
-# Additional SSH Security Settings
-echo "Configuring additional SSH security settings..."
-sudo sed -i 's/^.*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
-sudo sed -i 's/^.*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-sudo sed -i 's/^.*PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+    if [ ${#found_programs[@]} -gt 0 ]; then
+        echo "The following blacklisted programs were found on the system:"
+        echo "${found_programs[@]}"
+        
+        if confirm "Do you want to delete these blacklisted programs?"; then
+            for program in "${found_programs[@]}"; do
+                sudo apt-get remove -y "$program"
+                echo "$program has been removed."
+            done
+        else
+            echo "Blacklisted programs were not deleted."
+        fi
+    else
+        echo "No blacklisted programs found."
+    fi
+else
+    echo "Skipping check for blacklisted programs."
+fi
 
-# Restart SSH Service
-echo "Restarting SSH service to apply security settings..."
-sudo systemctl restart sshd
-
-# Run Fail2Ban and Backdoor Checks
+# Run Fail2Ban setup
 setup_fail2ban
+
+# Check for Backdoors
 check_for_backdoors
 
-echo "All security tasks completed successfully."
+# Get packages to be used later in this checklist
+echo "Installing necessary packages..."
+sudo apt-get -V -y install firefox chkrootkit ufw gufw clamav
+
+# Delete telnet
+echo "Removing telnet..."
+sudo apt-get purge -y telnet
+
+# Malware removal
+echo "Purging malware-related packages..."
+sudo apt-get -y purge hydra* john* nikto* netcat*
+
+# Media Files Cleanup
+echo "Finding media files (mp3, txt, wav, etc.)..."
+for suffix in mp3 txt wav wma aac mp4 mov avi gif jpg png bmp img exe msi bat sh; do
+    sudo find
