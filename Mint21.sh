@@ -10,6 +10,19 @@ confirm() {
     esac
 }
 
+# Disable SSH Root Login
+disable_ssh_root_login() {
+    if confirm "Do you want to disable SSH root login for added security?"; then
+        echo "Disabling SSH root login..."
+        sudo sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+        sudo sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+        sudo systemctl restart sshd
+        echo "SSH root login has been disabled."
+    else
+        echo "Skipping SSH root login disabling."
+    fi
+}
+
 # Setup Fail2Ban
 setup_fail2ban() {
     if confirm "Do you want to install and set up Fail2Ban?"; then
@@ -129,48 +142,6 @@ else
     echo "Skipping removal of Samba-related packages."
 fi
 
-# Find and Offer to Delete Music Files
-if confirm "Would you like to find music files (.mp3, .mp4) in the system and ask for deletion?"; then
-    echo "Searching for music files..."
-    music_files=$(find /home/ -type f \( -name "*.mp3" -o -name "*.mp4" \))
-    
-    if [ -n "$music_files" ]; then
-        echo "Music files found:"
-        echo "$music_files"
-        if confirm "Do you want to delete all of these files?"; then
-            echo "$music_files" | xargs rm -f
-            echo "Music files deleted."
-        else
-            echo "Music files were not deleted."
-        fi
-    else
-        echo "No music files found."
-    fi
-else
-    echo "Skipping search for music files."
-fi
-
-# Find and Offer to Delete Potential "Hacking Tools" Packages
-if confirm "Would you like to find downloaded packages (e.g., .tar.gz, .tgz, .zip, .deb) and ask for deletion?"; then
-    echo "Searching for potential downloaded 'hacking tools' packages..."
-    package_files=$(find /home/ -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \))
-    
-    if [ -n "$package_files" ]; then
-        echo "Potential 'hacking tools' packages found:"
-        echo "$package_files"
-        if confirm "Do you want to delete all of these files?"; then
-            echo "$package_files" | xargs rm -f
-            echo "Package files deleted."
-        else
-            echo "Package files were not deleted."
-        fi
-    else
-        echo "No suspicious package files found."
-    fi
-else
-    echo "Skipping search for potential 'hacking tools' packages."
-fi
-
 # Check for Blacklisted Programs
 if confirm "Would you like to check for blacklisted programs (nmap, zenmap, apache2, nginx, lighttpd, wireshark, tcpdump, netcat-traditional, nikto, ophcrack)?"; then
     echo "Checking for blacklisted programs..."
@@ -209,19 +180,8 @@ setup_fail2ban
 # Check for Backdoors
 check_for_backdoors
 
-# Get packages to be used later in this checklist
-echo "Installing necessary packages..."
-sudo apt-get -V -y install firefox chkrootkit ufw gufw clamav
+# Disable SSH Root Login
+disable_ssh_root_login
 
-# Delete telnet
-echo "Removing telnet..."
-sudo apt-get purge -y telnet
-
-# Malware removal
-echo "Purging malware-related packages..."
-sudo apt-get -y purge hydra* john* nikto* netcat*
-
-# Media Files Cleanup
-echo "Finding media files (mp3, txt, wav, etc.)..."
-for suffix in mp3 txt wav wma aac mp4 mov avi gif jpg png bmp img exe msi bat sh; do
-    sudo find
+# Final message
+echo "Script execution completed."
