@@ -197,6 +197,32 @@ check_python_backdoors() {
     fi
 }
 
+# Install ClamAV Antivirus and Perform Scan
+install_clamav() {
+    if confirm "Do you want to install and run ClamAV for antivirus scanning?"; then
+        echo "Installing ClamAV..."
+        sudo apt-get install -y clamav
+        sudo freshclam  # Update ClamAV database
+
+        echo "Running ClamAV Scan..."
+        sudo clamscan -r / --bell -i > clamav_scan_results.txt
+
+        if [ -s clamav_scan_results.txt ]; then
+            echo "ClamAV found potential threats:"
+            cat clamav_scan_results.txt
+            if confirm "Do you want to delete the detected threats?"; then
+                sudo clamscan -r / --remove
+            else
+                echo "Threats were not deleted."
+            fi
+        else
+            echo "No threats detected by ClamAV."
+        fi
+    else
+        echo "Skipping ClamAV installation and scan."
+    fi
+}
+
 # Main script execution
 
 # Update and Upgrade System (In the background with only essential info shown)
@@ -245,8 +271,7 @@ check_apache_configuration
 check_python_backdoors
 
 # Run ClamAV scan at the end of the script
-check_clamav  # Ensure ClamAV is installed and up-to-date
-scan_installed_programs_with_clamav
+install_clamav
 
 # Final message
 echo "Script execution completed."
