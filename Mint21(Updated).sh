@@ -1,7 +1,6 @@
 #!/bin/bash
-echo "Sai Neela's Cyberpatriot Script"
+echo "Cyberpatriot 2024 Script for State Round"
 echo "Cybersecurity is my dream"
-echo "UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU "
 echo "Script Starting......"
 
 # Function to ask for confirmation
