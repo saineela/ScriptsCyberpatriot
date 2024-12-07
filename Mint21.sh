@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "Sai Neela's Cyberpatriot Script"
 echo "Cybersecurity is my dream"
-echo "UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU "
+echo "UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU UwU "
 echo "Script Starting......"
 # Function to ask for confirmation
 confirm() {
@@ -140,7 +140,7 @@ fi
 # Remove Samba and SMB Packages
 if confirm "Would you like to remove any Samba-related packages?"; then
     echo "Removing Samba-related packages..."
-    sudo apt-get remove -y .*samba.* .*smb.*
+    sudo apt-get remove -y .*samba.* .*smb.* 
 else
     echo "Skipping removal of Samba-related packages."
 fi
