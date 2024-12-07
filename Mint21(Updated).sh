@@ -153,6 +153,39 @@ check_for_prohibited_software() {
     fi
 }
 
+# Remove Samba and SMB Packages
+remove_samba_packages() {
+    if confirm "Would you like to remove any Samba-related packages?"; then
+        echo "Removing Samba-related packages..."
+        sudo apt-get remove -y .*samba.* .*smb.* 
+    else
+        echo "Skipping removal of Samba-related packages."
+    fi
+}
+
+# Check for Blacklisted Programs
+check_for_blacklisted_programs() {
+    if confirm "Would you like to check for blacklisted programs (nmap, zenmap, apache2, nginx, lighttpd, wireshark, tcpdump, netcat-traditional, nikto, ophcrack)?"; then
+        echo "Checking for blacklisted programs..."
+        blacklisted_programs=("nmap" "zenmap" "apache2" "nginx" "lighttpd" "wireshark" "tcpdump" "netcat-traditional" "nikto" "ophcrack")
+        
+        # Loop through each blacklisted program and check if it is installed
+        for program in "${blacklisted_programs[@]}"; do
+            if dpkg -l | grep -qw "$program"; then
+                echo "$program is installed."
+                if confirm "Do you want to remove $program?"; then
+                    sudo apt-get remove -y "$program"
+                    echo "$program has been removed."
+                else
+                    echo "Skipping removal of $program."
+                fi
+            fi
+        done
+    else
+        echo "Skipping check for blacklisted programs."
+    fi
+}
+
 # Check Apache Configuration
 check_apache_configuration() {
     if confirm "Do you want to configure Apache settings if Apache is installed?"; then
@@ -237,40 +270,19 @@ else
     echo "Skipping system update and upgrade."
 fi
 
-# Start by scanning for MP3 files
+# Run Functions
 scan_for_media_files
-
-# Run Fail2Ban setup
 setup_fail2ban
-
-# Check for Backdoors
 check_for_backdoors
-
-# Disable SSH Root Login
 disable_ssh_root_login
-
-# Setup UFW Firewall
 setup_ufw
-
-# Setup password policies
 setup_password_policy
-
-# Setup Auditing
 setup_auditd
-
-# Check for unusual sudo users
 check_sudo_group
-
-# Check for prohibited software (Hydra)
 check_for_prohibited_software
-
-# Check Apache Configuration
+check_for_blacklisted_programs
 check_apache_configuration
-
-# Check for Python backdoors
 check_python_backdoors
-
-# Run ClamAV scan at the end of the script
 install_clamav
 
 # Final message
