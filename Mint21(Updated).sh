@@ -14,127 +14,202 @@ confirm() {
     esac
 }
 
-# Function to check and disable OpenSSH
-check_openssh() {
-    if dpkg -l | grep -qw "openssh"; then
-        if confirm "OpenSSH is present. Do you want to disable OpenSSH?"; then
-            sudo systemctl disable ssh
-            sudo systemctl stop ssh
-            echo "OpenSSH has been disabled."
-        else
-            echo "OpenSSH remains enabled."
-        fi
+# Disable SSH Root Login
+disable_ssh_root_login() {
+    if confirm "Do you want to disable SSH root login for added security?"; then
+        echo "Disabling SSH root login..."
+        sudo sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+        sudo sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+        sudo systemctl restart sshd
+        echo "SSH root login has been disabled."
     else
-        echo "OpenSSH is not installed."
+        echo "Skipping SSH root login disabling."
     fi
 }
 
-# Prohibited software removal
-remove_prohibited_software() {
-    prohibited_programs=("hydra")
-    for program in "${prohibited_programs[@]}"; do
+# Setup Fail2Ban
+setup_fail2ban() {
+    if confirm "Do you want to install and set up Fail2Ban?"; then
+        echo "Installing and configuring Fail2Ban..."
+        sudo apt-get install -y fail2ban
+
+        # Enable and start Fail2Ban service
+        sudo systemctl enable fail2ban
+        sudo systemctl start fail2ban
+
+        # Custom Fail2Ban configuration for SSH
+        sudo tee /etc/fail2ban/jail.local > /dev/null <<EOF
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 5
+bantime = 10m
+EOF
+
+        echo "Fail2Ban installed and configured."
+    else
+        echo "Skipping Fail2Ban installation."
+    fi
+}
+
+# Update and Upgrade System with Minimal Terminal Output
+update_and_upgrade_system() {
+    if confirm "Would you like to update and upgrade the system?"; then
+        echo "Updating and upgrading the system. Progress will be displayed, detailed logs saved to /var/log/system_update.log..."
+        
+        # Run the update and upgrade in the background with detailed logs
+        sudo apt-get update -y > /var/log/system_update.log 2>&1 &
+        pid=$!
+        echo "Updating package lists..."
+        wait $pid
+        
+        sudo apt-get upgrade -y > /var/log/system_upgrade.log 2>&1 &
+        pid=$!
+        echo "Installing package upgrades..."
+        wait $pid
+        
+        sudo apt-get dist-upgrade -y > /var/log/system_dist_upgrade.log 2>&1 &
+        pid=$!
+        echo "Performing distribution upgrades..."
+        wait $pid
+
+        echo "System update and upgrade completed. Detailed logs available at /var/log/system_update.log and /var/log/system_upgrade.log."
+    else
+        echo "Skipping system update and upgrade."
+    fi
+}
+
+# Install and Enable UFW (Uncomplicated Firewall)
+if confirm "Would you like to install and enable the UFW firewall?"; then
+    echo "Installing and enabling UFW firewall..."
+    sudo apt-get install -y ufw
+    sudo ufw enable
+    sudo ufw default deny incoming
+    sudo ufw default allow outgoing
+else
+    echo "Skipping UFW firewall installation and enablement."
+fi
+
+# Change Password Policy in /etc/login.defs
+if confirm "Would you like to set password policies for maximum and minimum days and warning age?"; then
+    echo "Setting password policies in /etc/login.defs..."
+    sudo sed -i 's/PASS_MAX_DAYS.*$/PASS_MAX_DAYS 90/' /etc/login.defs
+    sudo sed -i 's/PASS_MIN_DAYS.*$/PASS_MIN_DAYS 10/' /etc/login.defs
+    sudo sed -i 's/PASS_WARN_AGE.*$/PASS_WARN_AGE 7/' /etc/login.defs
+else
+    echo "Skipping password policy configuration."
+fi
+
+# Install and Enable Auditing
+if confirm "Would you like to install and enable auditd for system auditing?"; then
+    echo "Installing and enabling auditd..."
+    sudo apt-get install -y auditd
+    sudo auditctl -e 1
+else
+    echo "Skipping auditd installation and enablement."
+fi
+
+# Check for Unusual Administrators in the Sudo Group
+if confirm "Would you like to check for unusual administrators in the sudo group?"; then
+    echo "Checking for unusual administrators in the sudo group..."
+    sudo mawk -F: '$1 == "sudo"' /etc/group
+else
+    echo "Skipping check for unusual administrators."
+fi
+
+# Check for Users with UID Greater than 999 (Non-System Accounts)
+if confirm "Would you like to check for non-system users with UID greater than 999?"; then
+    echo "Checking for non-system users..."
+    sudo mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd
+else
+    echo "Skipping check for non-system users."
+fi
+
+# Check for Accounts with Empty Passwords
+if confirm "Would you like to check for accounts with empty passwords?"; then
+    echo "Checking for accounts with empty passwords..."
+    sudo mawk -F: '$2 == ""' /etc/passwd
+else
+    echo "Skipping check for accounts with empty passwords."
+fi
+
+# Check for Non-root UID 0 Accounts
+if confirm "Would you like to check for non-root accounts with UID 0?"; then
+    echo "Checking for non-root accounts with UID 0..."
+    sudo mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd
+else
+    echo "Skipping check for non-root accounts with UID 0."
+fi
+
+# Remove Samba and SMB Packages
+if confirm "Would you like to remove any Samba-related packages?"; then
+    echo "Removing Samba-related packages..."
+    sudo apt-get remove -y .*samba.* .*smb.*
+else
+    echo "Skipping removal of Samba-related packages."
+fi
+
+# Check for Blacklisted Programs
+if confirm "Would you like to check for blacklisted programs (nmap, zenmap, apache2, nginx, lighttpd, wireshark, tcpdump, netcat-traditional, nikto, ophcrack)?"; then
+    echo "Checking for blacklisted programs..."
+    blacklisted_programs=("nmap" "zenmap" "apache2" "nginx" "lighttpd" "wireshark" "tcpdump" "netcat-traditional" "nikto" "ophcrack")
+    found_programs=()
+    
+    # Loop through each blacklisted program and check if it is installed
+    for program in "${blacklisted_programs[@]}"; do
         if dpkg -l | grep -qw "$program"; then
-            sudo apt-get remove -y "$program"
-            echo "$program has been removed."
-        else
-            echo "$program not found on the system."
-        fi
-    done
-}
-
-# Check and remove prohibited MP3 files
-remove_prohibited_mp3s() {
-    find / -name "*.mp3" -type f | while read -r mp3; do
-        if confirm "Prohibited MP3 file found: $mp3. Do you want to remove it?"; then
-            rm "$mp3"
-            echo "$mp3 has been removed."
-        fi
-    done
-}
-
-# Search for Python backdoors
-check_python_backdoors() {
-    echo "Scanning for Python backdoors..."
-    python_files=$(find / -name "*.py" -type f 2>/dev/null)
-    if [[ -z "$python_files" ]]; then
-        echo "No Python files found."
-        return
-    fi
-
-    echo "Analyzing Python files..."
-    suspicious_files=()
-    for file in $python_files; do
-        if grep -qE "(os\.system|subprocess\.|eval\(|exec\()" "$file"; then
-            suspicious_files+=("$file")
+            found_programs+=("$program")
         fi
     done
 
-    if [[ ${#suspicious_files[@]} -gt 0 ]]; then
-        echo "Potential Python backdoors detected:"
-        for file in "${suspicious_files[@]}"; do
-            echo "$file"
-        done
-        if confirm "Do you want to delete these suspicious Python files?"; then
-            for file in "${suspicious_files[@]}"; do
-                rm "$file"
-                echo "$file has been removed."
+    if [ ${#found_programs[@]} -gt 0 ]; then
+        echo "The following blacklisted programs were found on the system:"
+        echo "${found_programs[@]}"
+        
+        if confirm "Do you want to delete these blacklisted programs?"; then
+            for program in "${found_programs[@]}"; do
+                sudo apt-get remove -y "$program"
+                echo "$program has been removed."
             done
         else
-            echo "Suspicious Python files were not deleted."
+            echo "Blacklisted programs were not deleted."
         fi
     else
-        echo "No Python backdoors detected."
+        echo "No blacklisted programs found."
+    fi
+else
+    echo "Skipping check for blacklisted programs."
+fi
+
+# Check for MP3 Files
+check_for_mp3_files() {
+    if confirm "Do you want to check for MP3 files?"; then
+        echo "Searching for MP3 files... Any prohibited files will be shown below:"
+        found_files=($(find / -type f -iname "*.mp3"))
+        
+        if [ ${#found_files[@]} -gt 0 ]; then
+            echo "Found MP3 files:"
+            for file in "${found_files[@]}"; do
+                echo "Path: $file"
+            done
+
+            if confirm "Do you want to delete these MP3 files?"; then
+                for file in "${found_files[@]}"; do
+                    sudo rm -rf "$file"
+                    echo "$file has been deleted."
+                done
+            else
+                echo "MP3 files were not deleted."
+            fi
+        else
+            echo "No MP3 files found."
+        fi
+    else
+        echo "Skipping MP3 file check."
     fi
 }
 
-# Apache configurations
-configure_apache() {
-    if dpkg -l | grep -qw "apache2"; then
-        if confirm "Apache is installed. Do you want to disable the server signature?"; then
-            sudo sed -i 's/^ServerSignature On/ServerSignature Off/' /etc/apache2/conf-available/security.conf
-            echo "Apache server signature disabled."
-        fi
-        if confirm "Do you want to set Apache server tokens to minimal?"; then
-            sudo sed -i 's/^ServerTokens OS/ServerTokens Prod/' /etc/apache2/conf-available/security.conf
-            echo "Apache server tokens set to least."
-        fi
-        sudo systemctl restart apache2
-    else
-        echo "Apache is not installed."
-    fi
-}
-
-# Password policies
-set_password_policies() {
-    echo "Configuring password policies..."
-    sudo sed -i '/^PASS_MIN_DAYS/s/[0-9]\+/1/' /etc/login.defs
-    sudo sed -i '/^PASS_MAX_DAYS/s/[0-9]\+/90/' /etc/login.defs
-    sudo sed -i '/^PASS_WARN_AGE/s/[0-9]\+/7/' /etc/login.defs
-    echo "Password policies configured."
-}
-
-# IPv4 TCP SYN cookies
-enable_tcp_syn_cookies() {
-    echo "Enabling TCP SYN cookies..."
-    sudo sysctl -w net.ipv4.tcp_syncookies=1
-    echo "TCP SYN cookies enabled."
-}
-
-# Insecure permissions on shadow file
-fix_shadow_permissions() {
-    echo "Fixing insecure permissions on the shadow file..."
-    sudo chmod 600 /etc/shadow
-    echo "Permissions for the shadow file fixed."
-}
-
-# Main execution
-set_password_policies
-enable_tcp_syn_cookies
-fix_shadow_permissions
-check_openssh
-remove_prohibited_software
-remove_prohibited_mp3s
-check_python_backdoors
-configure_apache
-
+# Final message
 echo "Script execution completed."
