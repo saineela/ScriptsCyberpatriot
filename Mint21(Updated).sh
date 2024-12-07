@@ -105,7 +105,7 @@ setup_ufw() {
     fi
 }
 
-# Change Password Policy in /etc/login.defs
+# Setup password policies
 setup_password_policy() {
     if confirm "Would you like to set password policies for maximum and minimum days and warning age?"; then
         echo "Setting password policies in /etc/login.defs..."
@@ -117,7 +117,7 @@ setup_password_policy() {
     fi
 }
 
-# Install and Enable Auditing
+# Setup Auditing
 setup_auditd() {
     if confirm "Would you like to install and enable auditd for system auditing?"; then
         echo "Installing and enabling auditd..."
@@ -138,33 +138,62 @@ check_sudo_group() {
     fi
 }
 
-# Check for Users with UID Greater than 999 (Non-System Accounts)
-check_non_system_users() {
-    if confirm "Would you like to check for non-system users with UID greater than 999?"; then
-        echo "Checking for non-system users..."
-        sudo mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd
+# Check for Prohibited Software (e.g., Hydra)
+check_for_prohibited_software() {
+    if confirm "Do you want to check for prohibited software like Hydra?"; then
+        echo "Checking for prohibited software..."
+        if dpkg-query -l | grep -q "hydra"; then
+            echo "Hydra found! Removing..."
+            sudo apt-get remove --purge -y hydra
+        else
+            echo "Hydra not found."
+        fi
     else
-        echo "Skipping check for non-system users."
+        echo "Skipping prohibited software check."
     fi
 }
 
-# Check for Accounts with Empty Passwords
-check_empty_passwords() {
-    if confirm "Would you like to check for accounts with empty passwords?"; then
-        echo "Checking for accounts with empty passwords..."
-        sudo mawk -F: '$2 == ""' /etc/passwd
+# Check Apache Configuration
+check_apache_configuration() {
+    if confirm "Do you want to configure Apache settings if Apache is installed?"; then
+        if dpkg-query -l | grep -q apache2; then
+            echo "Apache found. Disabling server signature and setting server tokens..."
+            sudo sed -i 's/#ServerSignature On/ServerSignature Off/' /etc/apache2/conf-enabled/security.conf
+            sudo sed -i 's/#ServerTokens Full/ServerTokens Prod/' /etc/apache2/conf-enabled/security.conf
+            sudo systemctl restart apache2
+        else
+            echo "Apache not found."
+        fi
     else
-        echo "Skipping check for accounts with empty passwords."
+        echo "Skipping Apache configuration."
     fi
 }
 
-# Check for Non-root UID 0 Accounts
-check_non_root_uid_0() {
-    if confirm "Would you like to check for non-root accounts with UID 0?"; then
-        echo "Checking for non-root accounts with UID 0..."
-        sudo mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd
+# Check for Python Backdoors
+check_python_backdoors() {
+    if confirm "Do you want to check for potential Python backdoors?"; then
+        echo "Searching for suspicious Python scripts..."
+
+        # Look for Python files with suspicious behavior (e.g., reverse shells)
+        find / -type f -iname "*.py" -exec grep -i -H "import socket\|os.system\|subprocess" {} \; > python_backdoors.txt
+
+        if [ -s python_backdoors.txt ]; then
+            echo "Potential Python backdoors found:"
+            cat python_backdoors.txt
+
+            if confirm "Do you want to delete these Python backdoors?"; then
+                while read -r file; do
+                    sudo rm -f "$file"
+                    echo "Deleted: $file"
+                done < python_backdoors.txt
+            else
+                echo "Python backdoors were not deleted."
+            fi
+        else
+            echo "No Python backdoors found."
+        fi
     else
-        echo "Skipping check for non-root accounts with UID 0."
+        echo "Skipping Python backdoor check."
     fi
 }
 
@@ -173,12 +202,9 @@ check_non_root_uid_0() {
 # Update and Upgrade System (In the background with only essential info shown)
 if confirm "Would you like to update and upgrade the system?"; then
     echo "Updating and upgrading the system..."
-
-    # Run update and upgrade in the background and suppress unnecessary output
     sudo apt-get update -y > /dev/null 2>&1 &
     sudo apt-get upgrade -y > /dev/null 2>&1 &
     sudo apt-get dist-upgrade -y > /dev/null 2>&1 &
-    
     echo "System is being updated and upgraded in the background. Please wait..."
     wait  # Wait for all processes to complete
 else
@@ -209,53 +235,17 @@ setup_auditd
 # Check for unusual sudo users
 check_sudo_group
 
-# Check for non-system users
-check_non_system_users
+# Check for prohibited software (Hydra)
+check_for_prohibited_software
 
-# Check for accounts with empty passwords
-check_empty_passwords
+# Check Apache Configuration
+check_apache_configuration
 
-# Check for non-root UID 0 accounts
-check_non_root_uid_0
-
-# Function to check for ClamAV Installation and Update Definitions
-check_clamav() {
-    if ! command -v clamscan &> /dev/null; then
-        echo "ClamAV is not installed. Installing ClamAV..."
-        sudo apt-get install -y clamav clamav-daemon
-        sudo freshclam   # Update ClamAV definitions
-    else
-        echo "ClamAV is already installed. Updating virus definitions..."
-        sudo freshclam   # Update ClamAV definitions if it's already installed
-    fi
-}
-
-# Function to scan files with ClamAV
-scan_with_clamav() {
-    echo "Scanning $1 with ClamAV..."
-    clamscan "$1"
-}
-
-# Function to scan installed programs with ClamAV
-scan_installed_programs_with_clamav() {
-    echo "Scanning installed programs with ClamAV..."
-
-    # List installed programs
-    installed_programs=$(dpkg-query -f '${binary:Package}\n' -W)
-
-    for program in $installed_programs; do
-        # Get the program binary location
-        program_path=$(which "$program")
-        
-        # Scan the program with ClamAV
-        scan_with_clamav "$program_path"
-    done
-}
+# Check for Python backdoors
+check_python_backdoors
 
 # Run ClamAV scan at the end of the script
 check_clamav  # Ensure ClamAV is installed and up-to-date
-
-# Scan installed programs with ClamAV
 scan_installed_programs_with_clamav
 
 # Final message
