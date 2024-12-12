@@ -255,6 +255,54 @@ install_clamav() {
     fi
 }
 
+# Fix Insecure Permissions on /etc/shadow File
+fix_insecure_shadow_permissions() {
+    if confirm "Would you like to check and fix insecure permissions on the /etc/shadow file?"; then
+        echo "Checking permissions of /etc/shadow..."
+
+        # Check current permissions of /etc/shadow
+        current_permissions=$(ls -l /etc/shadow)
+        echo "Current permissions on /etc/shadow: $current_permissions"
+
+        # If permissions are insecure (world readable), fix them
+        if [[ $(stat -c "%a" /etc/shadow) -eq 644 ]]; then
+            echo "Insecure permissions found on /etc/shadow. Fixing..."
+            sudo chmod 640 /etc/shadow
+            echo "Permissions on /etc/shadow have been fixed to 640."
+        else
+            echo "Permissions on /etc/shadow are already secure."
+        fi
+    else
+        echo "Skipping check for insecure shadow file permissions."
+    fi
+}
+
+# Set Minimum Password Length
+set_min_password_length() {
+    if confirm "Do you want to set a minimum password length for all users?"; then
+        echo "Setting minimum password length to 8 characters..."
+
+        # Edit PAM configuration for password length
+        sudo sed -i '/pam_unix.so/s/$/ minlen=8/' /etc/pam.d/common-password
+        echo "Minimum password length set to 8."
+    else
+        echo "Skipping setting minimum password length."
+    fi
+}
+
+# Fix Nullok Password Authentication
+fix_nullok_password_authentication() {
+    if confirm "Do you want to remove nullok from the password authentication file?"; then
+        echo "Removing nullok option from authentication file..."
+
+        # Edit PAM configuration to remove nullok
+        sudo sed -i '/pam_unix.so/s/nullok//' /etc/pam.d/common-auth
+        echo "Nullok option has been removed."
+    else
+        echo "Skipping removal of nullok option."
+    fi
+}
+
 # Main script execution
 
 # Update and Upgrade System (In the background with only essential info shown)
@@ -283,6 +331,9 @@ check_for_blacklisted_programs
 check_apache_configuration
 check_python_backdoors
 install_clamav
+fix_insecure_shadow_permissions
+set_min_password_length
+fix_nullok_password_authentication
 
 # Final message
 echo "Script execution completed."
