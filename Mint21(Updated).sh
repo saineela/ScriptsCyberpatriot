@@ -303,6 +303,27 @@ fix_nullok_password_authentication() {
     fi
 }
 
+# Install and Start X2GO Service
+install_x2go_service() {
+    if confirm "Would you like to install and start the X2GO service?"; then
+        echo "Installing X2GO server..."
+        sudo apt-get update -y
+        sudo apt-get install -y x2goserver
+
+        # Check if installation was successful
+        if dpkg-query -l | grep -q "x2goserver"; then
+            echo "X2GO service has been successfully installed."
+            sudo systemctl enable x2goserver
+            sudo systemctl start x2goserver
+            echo "X2GO service has been started."
+        else
+            echo "X2GO service installation failed."
+        fi
+    else
+        echo "Skipping X2GO service installation."
+    fi
+}
+
 # Main script execution
 
 # Update and Upgrade System (In the background with only essential info shown)
@@ -334,6 +355,7 @@ install_clamav
 fix_insecure_shadow_permissions
 set_min_password_length
 fix_nullok_password_authentication
+install_x2go_service
 
 # Final message
 echo "Script execution completed."
