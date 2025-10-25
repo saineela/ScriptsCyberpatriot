@@ -18,7 +18,7 @@ fi
 pip3 install rich typer
 
 echo "📥 Downloading Python script from GitHub..."
-wget https://raw.githubusercontent.com/saineela/ScriptsCyberpatriot/main/mint21-auto.py
+wget https://raw.githubusercontent.com/saineela/ScriptsCyberpatriot/main/Mint21/mint21-auto.py
 
 chmod +x mint21-auto.py
 echo "🚀 Launching Tool..."
